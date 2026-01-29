@@ -21,7 +21,7 @@ async function setupOverlay() {
     console.log("App démarrée en mode fantôme.");
 
     // 2. On enregistre le raccourci global (Ici: Alt + O)
-    await register('Alt+O', async (event) => {
+    await register('F8', async (event) => {
         if (event.state === "Pressed") {
             // On inverse l'état
             isGhostMode = !isGhostMode;
