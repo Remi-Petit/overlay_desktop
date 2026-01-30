@@ -34,7 +34,8 @@ async function openNewWindow() {
   const label = `fenetre-${Date.now()}`; 
 
   const webview = new WebviewWindow(label, {
-    title: 'Nouvelle Fenêtre',
+    url: '/overlay',
+    title: 'Overlay',
     width: 600,
     height: 400,
     transparent: true,
@@ -190,14 +191,5 @@ button {
 :root, body {
   background-color: transparent !important;
 }
-
-/* Si tu veux un effet de flou (Glassmorphism) */
-/* 
-#app {
-  background-color: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  height: 100vh;
-} 
-*/
 
 </style>

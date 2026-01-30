@@ -18,6 +18,13 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![greet, set_ignore_cursor_events])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                if window.label() == "main" {
+                    std::process::exit(0);
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
