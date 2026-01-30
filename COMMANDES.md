@@ -20,7 +20,7 @@ Si vous êtes sur Windows, il faut installer la version "msi" ou "nsis".
 
 # Pour donner le contexte du projet à l'IA
 cargo install code2prompt
-code2prompt . > contexte_projet.md
+code2prompt . --exclude "bun.lock" > contexte_projet.md
 
 
 
