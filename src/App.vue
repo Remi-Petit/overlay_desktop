@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { register } from '@tauri-apps/plugin-global-shortcut';
 import { invoke } from "@tauri-apps/api/core";
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 const greetMsg = ref("");
 const name = ref("");
@@ -40,29 +41,40 @@ async function setupOverlay() {
 
 // Lancer la configuration
 setupOverlay();
+
+
+// 2. Fonction pour créer la nouvelle fenêtre
+async function openNewWindow() {
+  // On crée une nouvelle fenêtre avec un identifiant unique (ex: 'secondary')
+  const webview = new WebviewWindow('secondary', {
+    url: 'https://tauri.app', // Tu peux mettre une URL externe ou locale (ex: '/#/settings')
+    title: 'Ma Seconde Fenêtre',
+    width: 600,
+    height: 400,
+    decorations: true, // On veut probablement des bordures pour cette fenêtre
+    alwaysOnTop: false // Pas forcément au-dessus de tout
+  });
+
+  // Gestion des erreurs (optionnel)
+  webview.once('tauri://error', function (e) {
+    console.error('Erreur création fenêtre', e);
+  });
+}
 </script>
 
 <template>
   <main class="container">
     <h1>Welcome to Tauri + Vue</h1>
 
-    <div class="row">
-      <a href="https://vite.dev" target="_blank">
-        <img src="/vite.svg" class="logo vite" alt="Vite logo" />
-      </a>
-      <a href="https://tauri.app" target="_blank">
-        <img src="/tauri.svg" class="logo tauri" alt="Tauri logo" />
-      </a>
-      <a href="https://vuejs.org/" target="_blank">
-        <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-      </a>
-    </div>
-    <p>Click on the Tauri, Vite, and Vue logos to learn more.</p>
-
     <form class="row" @submit.prevent="greet">
       <input id="greet-input" v-model="name" placeholder="Enter a name..." />
       <button type="submit">Greet</button>
     </form>
+    
+    <div class="row" style="margin-top: 20px;">
+        <button @click="openNewWindow">Ouvrir une nouvelle fenêtre</button>
+    </div>
+
     <p>{{ greetMsg }}</p>
   </main>
 </template>
