@@ -12,47 +12,35 @@ async function greet() {
   greetMsg.value = await invoke("greet", { name: name.value });
 }
 
-
-// État actuel : true = on clique à travers (fantôme), false = on clique sur l'app
-let isGhostMode = true;
+let isGhostMode = false;
 
 async function setupOverlay() {
-    // 1. Au démarrage, on active le mode fantôme
-    await invoke('set_ignore_cursor_events', { ignore: true });
+    await invoke('set_ignore_cursor_events', { ignore: false });
     console.log("App démarrée en mode fantôme.");
 
-    // 2. On enregistre le raccourci global (Ici: Alt + O)
     await register('F8', async (event) => {
         if (event.state === "Pressed") {
-            // On inverse l'état
             isGhostMode = !isGhostMode;
-            
-            // On applique le changement à la fenêtre
             await invoke('set_ignore_cursor_events', { ignore: isGhostMode });
-            
-            // Feedback visuel (optionnel)
             console.log(isGhostMode ? "Mode Fantôme (Click-through)" : "Mode Interactif");
-            
-            // Astuce UX : Changer l'opacité pour montrer qu'on est en mode interactif
             document.body.style.opacity = isGhostMode ? "0.5" : "1.0";
         }
     });
 }
 
-// Lancer la configuration
 setupOverlay();
 
-
 async function openNewWindow() {
-  // On génère un label unique basé sur l'heure actuelle (ex: 'fenetre-1715698421')
   const label = `fenetre-${Date.now()}`; 
 
   const webview = new WebviewWindow(label, {
-    url: 'https://tauri.app',
     title: 'Nouvelle Fenêtre',
     width: 600,
     height: 400,
+    transparent: true,
     decorations: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
   });
 
   webview.once('tauri://error', function (e) {
