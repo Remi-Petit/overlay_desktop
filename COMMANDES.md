@@ -10,7 +10,7 @@ bun tauri dev
 bun tauri dev
 
 ## Build du projet
-bun tauri dev
+bun tauri build
 
 
 # Télécharger la version desktop
