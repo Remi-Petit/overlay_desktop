@@ -43,21 +43,20 @@ async function setupOverlay() {
 setupOverlay();
 
 
-// 2. Fonction pour créer la nouvelle fenêtre
 async function openNewWindow() {
-  // On crée une nouvelle fenêtre avec un identifiant unique (ex: 'secondary')
-  const webview = new WebviewWindow('secondary', {
-    url: 'https://tauri.app', // Tu peux mettre une URL externe ou locale (ex: '/#/settings')
-    title: 'Ma Seconde Fenêtre',
+  // On génère un label unique basé sur l'heure actuelle (ex: 'fenetre-1715698421')
+  const label = `fenetre-${Date.now()}`; 
+
+  const webview = new WebviewWindow(label, {
+    url: 'https://tauri.app',
+    title: 'Nouvelle Fenêtre',
     width: 600,
     height: 400,
-    decorations: true, // On veut probablement des bordures pour cette fenêtre
-    alwaysOnTop: false // Pas forcément au-dessus de tout
+    decorations: true,
   });
 
-  // Gestion des erreurs (optionnel)
   webview.once('tauri://error', function (e) {
-    console.error('Erreur création fenêtre', e);
+    console.error('Erreur:', e);
   });
 }
 </script>
