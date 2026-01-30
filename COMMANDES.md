@@ -21,3 +21,14 @@ Si vous êtes sur Windows, il faut installer la version "msi" ou "nsis".
 # Pour donner le contexte du projet à l'IA
 cargo install code2prompt
 code2prompt . > contexte_projet.md
+
+
+
+
+
+
+
+
+# Initialisation du projet
+bun x nuxi@latest init . --force
+bun add -D @tauri-apps/cli
