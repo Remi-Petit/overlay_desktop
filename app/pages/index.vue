@@ -45,10 +45,6 @@ async function openNewWindow() {
   webview.once('tauri://error', function (e) {
     console.error('Erreur:', e);
   });
-
-  webview.once('tauri://created', async () => {
-     await webview.setIgnoreCursorEvents(true);
-  });
 }
 </script>
 
