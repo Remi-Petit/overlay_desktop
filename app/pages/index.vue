@@ -2,30 +2,26 @@
 import { ref } from "vue";
 import { register } from '@tauri-apps/plugin-global-shortcut';
 import { invoke } from "@tauri-apps/api/core";
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-
-const greetMsg = ref("");
-const name = ref("");
-
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsg.value = await invoke("greet", { name: name.value });
-}
+import { WebviewWindow, getAllWebviewWindows } from '@tauri-apps/api/webviewWindow';
 
 let isGhostMode = false;
 
 async function setupOverlay() {
-    await invoke('set_ignore_cursor_events', { ignore: false });
-    console.log("App démarrée en mode fantôme.");
-
-    await register('F8', async (event) => {
-        if (event.state === "Pressed") {
-            isGhostMode = !isGhostMode;
-            await invoke('set_ignore_cursor_events', { ignore: isGhostMode });
-            console.log(isGhostMode ? "Mode Fantôme (Click-through)" : "Mode Interactif");
-            document.body.style.opacity = isGhostMode ? "0.5" : "1.0";
+  await register('F8', async (event) => {
+      if (event.state === "Pressed") {
+        isGhostMode = !isGhostMode;
+        const windows = await getAllWebviewWindows();
+        
+        for (const win of windows) {
+            if (win.label.startsWith('fenetre-')) {
+              await invoke('set_ghost_mode', { 
+                  label: win.label, 
+                  ghost: isGhostMode 
+              });
+            }
         }
-    });
+      }
+  });
 }
 
 setupOverlay();
@@ -42,42 +38,29 @@ async function openNewWindow() {
     decorations: true,
     alwaysOnTop: true,
     skipTaskbar: true,
+    resizable: true,
+    shadow: false,
   });
 
   webview.once('tauri://error', function (e) {
     console.error('Erreur:', e);
+  });
+
+  webview.once('tauri://created', async () => {
+     await webview.setIgnoreCursorEvents(true);
   });
 }
 </script>
 
 <template>
   <main class="container">
-    <h1>Welcome to Tauri + Vue</h1>
-
-    <form class="row" @submit.prevent="greet">
-      <input id="greet-input" v-model="name" placeholder="Enter a name..." />
-      <button type="submit">Greet</button>
-    </form>
-    
     <div class="row" style="margin-top: 20px;">
         <button @click="openNewWindow">Ouvrir une nouvelle fenêtre</button>
     </div>
-
-    <p>{{ greetMsg }}</p>
   </main>
 </template>
 
 <style scoped>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #249b73);
-}
-
-</style>
-<style>
 :root {
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   font-size: 16px;
@@ -101,17 +84,6 @@ async function openNewWindow() {
   flex-direction: column;
   justify-content: center;
   text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
 }
 
 .row {
