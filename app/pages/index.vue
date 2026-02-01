@@ -6,17 +6,23 @@ import { WebviewWindow, getAllWebviewWindows } from '@tauri-apps/api/webviewWind
 
 let isGhostMode = false;
 const lastCapture = ref("");
+let captureInterval: any = null;
 
-async function startCapture(label: string) {
-  setInterval(async () => {
+async function startRustStream(label: string) {
+  if (captureInterval) clearInterval(captureInterval);
+
+  captureInterval = setInterval(async () => {
     try {
-      // On demande la capture de la fenêtre par son label
-      const base64Image = await invoke("capture_overlay", { window: label });
-      lastCapture.value = base64Image as string;
+      const base64 = await invoke<string>(
+        'capture_specific_window',
+        { label } // ✅ même nom que Rust
+      );
+
+      lastCapture.value = base64;
     } catch (e) {
-      console.error("Erreur capture:", e);
+      console.warn("Attente de la fenêtre...", e);
     }
-  }, 100); // 10 images par seconde
+  }, 100);
 }
 
 async function setupOverlay() {
@@ -44,7 +50,7 @@ async function openNewWindow() {
 
   const webview = new WebviewWindow(label, {
     url: '/overlay',
-    title: 'Overlay',
+    title: label,
     width: 600,
     height: 400,
     transparent: true,
@@ -59,8 +65,17 @@ async function openNewWindow() {
     console.error('Erreur:', e);
   });
 
-  webview.once('tauri://created', () => {
-    startCapture(label);
+  webview.once('tauri://created', async () => {
+    console.log(`Fenêtre ${label} créée côté Tauri. Synchronisation OS...`);
+
+    // 1. On re-force le titre pour être sûr que l'API Tauri l'envoie à l'OS
+    await webview.setTitle(label);
+
+    // 2. On attend 1 seconde complète pour laisser le temps à Windows d'indexer la fenêtre
+    setTimeout(() => {
+        console.log("Démarrage de la recherche Rust...");
+        startRustStream(label);
+    }, 1000); 
   });
 }
 </script>
