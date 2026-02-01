@@ -5,6 +5,19 @@ import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow, getAllWebviewWindows } from '@tauri-apps/api/webviewWindow';
 
 let isGhostMode = false;
+const lastCapture = ref("");
+
+async function startCapture(label: string) {
+  setInterval(async () => {
+    try {
+      // On demande la capture de la fenêtre par son label
+      const base64Image = await invoke("capture_overlay", { window: label });
+      lastCapture.value = base64Image as string;
+    } catch (e) {
+      console.error("Erreur capture:", e);
+    }
+  }, 100); // 10 images par seconde
+}
 
 async function setupOverlay() {
   await register('F8', async (event) => {
@@ -45,6 +58,10 @@ async function openNewWindow() {
   webview.once('tauri://error', function (e) {
     console.error('Erreur:', e);
   });
+
+  webview.once('tauri://created', () => {
+    startCapture(label);
+  });
 }
 </script>
 
@@ -52,6 +69,10 @@ async function openNewWindow() {
   <main class="container">
     <div class="row" style="margin-top: 20px;">
         <button @click="openNewWindow">Ouvrir une nouvelle fenêtre</button>
+    </div>
+    <div class="preview-box" v-if="lastCapture">
+      <h3>Flux Overlay (Analyse YOLO à venir)</h3>
+      <img :src="lastCapture" style="width: 100%; border: 2px solid red;" />
     </div>
   </main>
 </template>
