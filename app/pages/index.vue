@@ -35,11 +35,11 @@ async function openNewWindow() {
     width: 600,
     height: 400,
     transparent: true,
-    decorations: true,
+    decorations: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: true,
-    shadow: false,
+    shadow: true,
   });
 
   webview.once('tauri://error', function (e) {

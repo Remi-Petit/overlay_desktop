@@ -1,13 +1,19 @@
 <template>
-  <div class="overlay-container">
-    </div>
+  <div class="overlay-container" data-tauri-drag-region></div>
 </template>
 
 <style scoped>
-.overlay-container {
-  background-color: transparent; /* Pour garder la transparence définie dans Tauri */
-  display: flex;
-  justify-content: center;
-  align-items: center;
+/* https://v2.tauri.app/fr/learn/window-customization/#html */
+*[data-tauri-drag-region] {
+  app-region: drag;
+  width: 100vw;
+  height: 100vh;
+}
+
+:global(html), 
+:global(body) {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 </style>

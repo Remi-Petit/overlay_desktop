@@ -4,7 +4,7 @@ use tauri::Manager;
 #[tauri::command]
 fn set_ghost_mode(app_handle: tauri::AppHandle, label: String, ghost: bool) -> Result<(), String> {
     if let Some(window) = app_handle.get_webview_window(&label) {
-        window.set_decorations(!ghost).map_err(|e| e.to_string())?;
+        window.set_shadow(!ghost).map_err(|e| e.to_string())?;
         window.set_ignore_cursor_events(ghost).map_err(|e| e.to_string())?;
     }
     Ok(())
