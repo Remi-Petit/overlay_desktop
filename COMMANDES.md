@@ -23,6 +23,9 @@ cargo install code2prompt
 code2prompt . --exclude "bun.lock" > contexte_projet.md
 
 
+# Pour recharger le cache de cargo
+cd ./src-tauri
+cargo clean
 
 
 
