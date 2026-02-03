@@ -4,13 +4,13 @@
 https://bun.com/docs/installation
 
 ## Installation des packages
-bun tauri dev
+bun i
 
 ## Lancement du projet
 bun tauri dev
 
 ## Build du projet
-bun tauri dev
+bun tauri build
 
 
 # Télécharger la version desktop
