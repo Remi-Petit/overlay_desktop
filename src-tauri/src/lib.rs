@@ -1,9 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-use tauri::Manager;
-use crabgrab::prelude::*;
-use image::{DynamicImage, ImageBuffer, Rgba};
-use base64::{engine::general_purpose, Engine as _};
-use std::io::Cursor;
+use tauri::{AppHandle, Manager, WebviewWindow, ipc::Response};
+use xcap::Monitor;
+use image::imageops;
 
 #[tauri::command]
 fn set_ghost_mode(app_handle: tauri::AppHandle, label: String, ghost: bool) -> Result<(), String> {
@@ -15,83 +13,64 @@ fn set_ghost_mode(app_handle: tauri::AppHandle, label: String, ghost: bool) -> R
 }
 
 #[tauri::command]
-async fn capture_specific_window(label: String) -> Result<String, String> {
-    // 1️⃣ Autorisation de capture
-    let token = match CaptureStream::test_access(false) {
-        Some(token) => token,
-        None => {
-            CaptureStream::request_access(false)
-                .await
-                .ok_or("Permission de capture refusée")?
-        }
-    };
-
-    // 2️⃣ Récupération des fenêtres normales
-    let content = CapturableContent::new(CapturableContentFilter::NORMAL_WINDOWS)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 3️⃣ Recherche de la fenêtre par titre
-    let window = content
-        .windows()
-        .find(|w| w.title() == label)
-        .ok_or(format!("Fenêtre '{}' introuvable", label))?;
-
-    // 4️⃣ Configuration (on laisse CrabGrab choisir le meilleur format)
-    let config = CaptureConfig::with_window(window, CaptureStream::supported_pixel_formats()[0])
-        .map_err(|e| e.to_string())?;
-
-    // 5️⃣ Capture d'un frame (utilisation d'un channel borné pour la sécurité)
-    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-
-    let mut stream = CaptureStream::new(token, config, move |event| {
-        if let Ok(StreamEvent::Video(frame)) = event {
-            let _ = sender.try_send(frame); // On envoie si le canal est vide
-        }
-    }).map_err(|e| e.to_string())?;
-
-    // 6️⃣ Attente du frame
-    let frame = receiver
-        .recv_timeout(std::time::Duration::from_millis(1000))
-        .map_err(|_| "Timeout capture image")?;
-
-    stream.stop().ok();
-
-    // 7️⃣ Extraction du Bitmap avec les types génériques explicites
-    let bitmap = frame.get_bitmap().map_err(|e| format!("{:?}", e))?;
+async fn capture_overlay(app: AppHandle, window: WebviewWindow, target_label: Option<String>) -> Result<Response, String> {
     
-    let (width, height, flat_data) = match bitmap {
-        FrameBitmap::BgraUnorm8x4(data) => {
-            let w = data.width as u32;
-            let h = data.height as u32;
-            let mut pixels = Vec::with_capacity((w * h * 4) as usize);
-            
-            // CrabGrab retourne souvent du BGRA (Windows/macOS), image-rs veut du RGBA
-            for p in data.data.iter() {
-                pixels.push(p[2]); // R
-                pixels.push(p[1]); // G
-                pixels.push(p[0]); // B
-                pixels.push(p[3]); // A
-            }
-            (w, h, pixels)
-        },
-        _ => return Err("Format de pixel non supporté par cet exemple (attendu: Bgra)".into()),
+    // 1. Logique de ciblage
+    let target_window = if let Some(label) = target_label {
+        app.get_webview_window(&label).ok_or(format!("Fenêtre '{}' introuvable", label))?
+    } else {
+        window
     };
+    
+    let window_pos = target_window.outer_position().map_err(|e| e.to_string())?;
+    let window_size = target_window.outer_size().map_err(|e| e.to_string())?;
 
-    // 8️⃣ Création de l'image
-    let image_buffer = ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, flat_data)
-        .ok_or("Buffer invalide")?;
+    // 2. Thread de capture
+    // CORRECTION : On précise le type de retour -> Result<Vec<u8>, String>
+    let binary_data = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<u8>, String> {
+        
+        let monitors = Monitor::all().map_err(|e| e.to_string())?;
+        
+        let monitor = monitors.into_iter().find(|m| {
+             let x = m.x().unwrap_or(0);
+             let y = m.y().unwrap_or(0);
+             let w = m.width().unwrap_or(0);
+             let h = m.height().unwrap_or(0);
+             window_pos.x >= x && window_pos.x < x + w as i32 &&
+             window_pos.y >= y && window_pos.y < y + h as i32
+        })
+        // CORRECTION : On convertit le message d'erreur statique en String
+        .ok_or("Moniteur introuvable".to_string())?;
 
-    // 9️⃣ Encodage PNG → base64 (On renomme la variable pour éviter le conflit avec la crate)
-    let mut png_bytes: Vec<u8> = Vec::new();
-    DynamicImage::ImageRgba8(image_buffer)
-        .write_to(&mut Cursor::new(&mut png_bytes), image::ImageFormat::Png)
-        .map_err(|e| e.to_string())?;
+        let image = monitor.capture_image().map_err(|e| e.to_string())?;
+        
+        let m_x = monitor.x().map_err(|e| e.to_string())?;
+        let m_y = monitor.y().map_err(|e| e.to_string())?;
+        
+        let crop_x = (window_pos.x - m_x).max(0) as u32;
+        let crop_y = (window_pos.y - m_y).max(0) as u32;
+        let crop_w = window_size.width.min(image.width() - crop_x);
+        let crop_h = window_size.height.min(image.height() - crop_y);
 
-    // Utilisation explicite du chemin de la crate pour éviter toute ambiguïté
-    let b64_output = general_purpose::STANDARD.encode(png_bytes);
+        let cropped_image = imageops::crop_imm(&image, crop_x, crop_y, crop_w, crop_h).to_image();
+        
+        let width = cropped_image.width();
+        let height = cropped_image.height();
+        let mut pixels = cropped_image.into_raw();
 
-    Ok(format!("data:image/png;base64,{}", b64_output))
+        // 3. Construction du paquet binaire
+        let mut response_buffer = Vec::with_capacity(8 + pixels.len());
+        
+        response_buffer.extend_from_slice(&width.to_le_bytes());
+        response_buffer.extend_from_slice(&height.to_le_bytes());
+        response_buffer.append(&mut pixels);
+
+        Ok(response_buffer)
+
+    }).await.map_err(|e| e.to_string())??; 
+    // Le double ?? gère l'erreur du thread ET l'erreur interne (String)
+
+    Ok(Response::new(binary_data))
 }
 
 
@@ -100,7 +79,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![set_ghost_mode, capture_specific_window])
+        .invoke_handler(tauri::generate_handler![set_ghost_mode, capture_overlay])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
                 if window.label() == "main" {

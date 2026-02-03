@@ -1,29 +1,86 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, onUnmounted, useTemplateRef } from 'vue';
 import { register } from '@tauri-apps/plugin-global-shortcut';
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow, getAllWebviewWindows } from '@tauri-apps/api/webviewWindow';
 
 let isGhostMode = false;
-const lastCapture = ref("");
-let captureInterval: any = null;
+let isCapturing = false; // Drapeau pour contrôler la boucle de capture
+const canvasRef = useTemplateRef('canvasRef');
 
-async function startRustStream(label: string) {
-  if (captureInterval) clearInterval(captureInterval);
+// On stocke le label de la fenêtre overlay active pour savoir qui capturer
+const activeOverlayLabel = ref<string | null>(null);
 
-  captureInterval = setInterval(async () => {
-    try {
-      const base64 = await invoke<string>(
-        'capture_specific_window',
-        { label } // ✅ même nom que Rust
-      );
+const startCaptureLoop = async () => {
+  if (isCapturing) return;
+  isCapturing = true;
 
-      lastCapture.value = base64;
-    } catch (e) {
-      console.warn("Attente de la fenêtre...", e);
+  const loop = async () => {
+    // 1. Arrêt si le composant est démonté
+    if (!isCapturing) return;
+
+    // 2. Si pas de fenêtre cible, on attend un peu
+    if (!activeOverlayLabel.value) {
+      setTimeout(() => requestAnimationFrame(loop), 500);
+      return;
     }
-  }, 100);
-}
+
+    try {
+      // 3. Appel à Rust (Mode Binaire)
+      // On attend un ArrayBuffer, pas un JSON !
+      const response = await invoke<ArrayBuffer>('capture_overlay', { 
+        targetLabel: activeOverlayLabel.value 
+      });
+      
+      // 4. Décodage manuel des octets (Ultra rapide)
+      const dataView = new DataView(response);
+      
+      // Les 4 premiers octets sont la Largeur (Little Endian)
+      const width = dataView.getUint32(0, true);
+      // Les 4 suivants sont la Hauteur
+      const height = dataView.getUint32(4, true);
+      
+      // Le reste, ce sont les pixels (à partir de l'octet 8)
+      // Uint8ClampedArray crée une "vue" sur la mémoire sans la copier
+      const pixelData = new Uint8ClampedArray(response, 8);
+
+      // 5. Dessin sur le Canvas
+      const canvas = canvasRef.value;
+      if (canvas) {
+        // Redimensionnement seulement si nécessaire
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            // Création de l'image depuis les données binaires
+            const imageData = new ImageData(pixelData, width, height);
+            ctx.putImageData(imageData, 0, 0);
+        }
+      }
+
+    } catch (error) {
+      // On ignore silencieusement les erreurs de frame pour ne pas spammer la console
+      // console.warn("Frame sautée:", error);
+    }
+
+    // 6. Boucle infinie fluide (aussi vite que possible)
+    requestAnimationFrame(loop);
+  };
+
+  loop();
+};
+
+// --- LIFECYCLE VUE ---
+onMounted(() => {
+  startCaptureLoop();
+});
+
+onUnmounted(() => {
+  isCapturing = false; // Arrête proprement la boucle
+});
 
 async function setupOverlay() {
   await register('F8', async (event) => {
@@ -46,7 +103,8 @@ async function setupOverlay() {
 setupOverlay();
 
 async function openNewWindow() {
-  const label = `fenetre-${Date.now()}`; 
+  const label = `fenetre-${Date.now()}`;
+  activeOverlayLabel.value = label;
 
   const webview = new WebviewWindow(label, {
     url: '/overlay',
@@ -64,19 +122,6 @@ async function openNewWindow() {
   webview.once('tauri://error', function (e) {
     console.error('Erreur:', e);
   });
-
-  webview.once('tauri://created', async () => {
-    console.log(`Fenêtre ${label} créée côté Tauri. Synchronisation OS...`);
-
-    // 1. On re-force le titre pour être sûr que l'API Tauri l'envoie à l'OS
-    await webview.setTitle(label);
-
-    // 2. On attend 1 seconde complète pour laisser le temps à Windows d'indexer la fenêtre
-    setTimeout(() => {
-        console.log("Démarrage de la recherche Rust...");
-        startRustStream(label);
-    }, 1000); 
-  });
 }
 </script>
 
@@ -85,9 +130,9 @@ async function openNewWindow() {
     <div class="row" style="margin-top: 20px;">
         <button @click="openNewWindow">Ouvrir une nouvelle fenêtre</button>
     </div>
-    <div class="preview-box" v-if="lastCapture">
+    <div class="preview-box">
       <h3>Flux Overlay (Analyse YOLO à venir)</h3>
-      <img :src="lastCapture" style="width: 100%; border: 2px solid red;" />
+      <canvas ref="canvasRef" class="overlay-canvas"></canvas>
     </div>
   </main>
 </template>
