@@ -7,6 +7,7 @@ https://bun.com/docs/installation
 bun i
 
 ## Lancement du projet
+$env:RUSTFLAGS="-A warnings";   (Windows)
 bun tauri dev
 
 ## Build du projet
