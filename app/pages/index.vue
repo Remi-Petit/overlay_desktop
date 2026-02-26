@@ -9,6 +9,9 @@ const lastCapture = ref("");
 const gstreamerResult = ref("");
 const gstreamerError = ref("");
 const gstreamerLoading = ref(false);
+const streamRunning = ref(false);
+const streamMessage = ref("");
+const streamError = ref("");
 
 async function testGstreamer() {
   gstreamerResult.value = "";
@@ -44,6 +47,25 @@ async function setupOverlay() {
 
 setupOverlay();
 
+async function toggleStream() {
+  streamMessage.value = "";
+  streamError.value = "";
+  try {
+    if (streamRunning.value) {
+      const result = await invoke<string>('stop_stream');
+      streamMessage.value = result;
+      streamRunning.value = false;
+    } else {
+      const result = await invoke<string>('start_stream');
+      streamMessage.value = result;
+      streamRunning.value = true;
+    }
+  } catch (e: any) {
+    streamError.value = String(e);
+    streamRunning.value = false;
+  }
+}
+
 async function openNewWindow() {
   const label = `fenetre-${Date.now()}`; 
 
@@ -73,12 +95,21 @@ async function openNewWindow() {
         <button @click="testGstreamer" :disabled="gstreamerLoading">
           {{ gstreamerLoading ? 'Test en cours...' : 'Tester GStreamer (sidecar)' }}
         </button>
+        <button @click="toggleStream" :style="streamRunning ? 'background: #c0392b; color: white;' : ''">
+          {{ streamRunning ? '⏹ Arrêter le stream' : '▶ Test Stream' }}
+        </button>
     </div>
     <div v-if="gstreamerResult" style="margin-top: 15px; padding: 10px; background: #1a1a2e; color: #0f0; border-radius: 8px; text-align: left; white-space: pre-wrap; font-family: monospace;">
       ✅ {{ gstreamerResult }}
     </div>
     <div v-if="gstreamerError" style="margin-top: 15px; padding: 10px; background: #2e1a1a; color: #f66; border-radius: 8px; text-align: left; white-space: pre-wrap; font-family: monospace;">
       ❌ {{ gstreamerError }}
+    </div>
+    <div v-if="streamMessage" style="margin-top: 15px; padding: 10px; background: #1a1a2e; color: #0f0; border-radius: 8px; text-align: left; font-family: monospace;">
+      ✅ {{ streamMessage }}
+    </div>
+    <div v-if="streamError" style="margin-top: 15px; padding: 10px; background: #2e1a1a; color: #f66; border-radius: 8px; text-align: left; white-space: pre-wrap; font-family: monospace;">
+      ❌ {{ streamError }}
     </div>
     <div class="preview-box" v-if="lastCapture">
       <h3>Flux Overlay (Analyse YOLO à venir)</h3>
