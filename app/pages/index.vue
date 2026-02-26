@@ -6,6 +6,23 @@ import { WebviewWindow, getAllWebviewWindows } from '@tauri-apps/api/webviewWind
 
 let isGhostMode = false;
 const lastCapture = ref("");
+const gstreamerResult = ref("");
+const gstreamerError = ref("");
+const gstreamerLoading = ref(false);
+
+async function testGstreamer() {
+  gstreamerResult.value = "";
+  gstreamerError.value = "";
+  gstreamerLoading.value = true;
+  try {
+    const result = await invoke<string>('test_gstreamer');
+    gstreamerResult.value = result;
+  } catch (e: any) {
+    gstreamerError.value = String(e);
+  } finally {
+    gstreamerLoading.value = false;
+  }
+}
 
 async function setupOverlay() {
   await register('F8', async (event) => {
@@ -51,8 +68,17 @@ async function openNewWindow() {
 
 <template>
   <main class="container">
-    <div class="row" style="margin-top: 20px;">
+    <div class="row" style="margin-top: 20px; gap: 10px;">
         <button @click="openNewWindow">Ouvrir une nouvelle fenêtre</button>
+        <button @click="testGstreamer" :disabled="gstreamerLoading">
+          {{ gstreamerLoading ? 'Test en cours...' : 'Tester GStreamer (sidecar)' }}
+        </button>
+    </div>
+    <div v-if="gstreamerResult" style="margin-top: 15px; padding: 10px; background: #1a1a2e; color: #0f0; border-radius: 8px; text-align: left; white-space: pre-wrap; font-family: monospace;">
+      ✅ {{ gstreamerResult }}
+    </div>
+    <div v-if="gstreamerError" style="margin-top: 15px; padding: 10px; background: #2e1a1a; color: #f66; border-radius: 8px; text-align: left; white-space: pre-wrap; font-family: monospace;">
+      ❌ {{ gstreamerError }}
     </div>
     <div class="preview-box" v-if="lastCapture">
       <h3>Flux Overlay (Analyse YOLO à venir)</h3>
