@@ -12,6 +12,8 @@ const gstreamerLoading = ref(false);
 const streamRunning = ref(false);
 const streamMessage = ref("");
 const streamError = ref("");
+const streamPort = ref<number | null>(null);
+let rtcPeerConnection: RTCPeerConnection | null = null;
 
 async function testGstreamer() {
   gstreamerResult.value = "";
@@ -47,18 +49,85 @@ async function setupOverlay() {
 
 setupOverlay();
 
+async function setupWebRtc(port: number) {
+  try {
+    // Fetch the SDP offer from the Rust signaling server
+    const resp = await fetch(`http://127.0.0.1:${port}/api/offer`);
+    if (!resp.ok) throw new Error(`Offer fetch failed: ${resp.status}`);
+    const offerSdp = await resp.text();
+
+    // Create a peer connection (local-only — no STUN needed)
+    rtcPeerConnection = new RTCPeerConnection({ iceServers: [] });
+
+    // When a track arrives, display it in the <video> element
+    rtcPeerConnection.ontrack = (event) => {
+      const video = document.getElementById('webrtc-video') as HTMLVideoElement;
+      if (video && event.streams[0]) {
+        video.srcObject = event.streams[0];
+        video.play().catch(() => {});
+      }
+    };
+
+    // Set remote description = the offer from Rust
+    await rtcPeerConnection.setRemoteDescription({ type: 'offer', sdp: offerSdp });
+
+    // Create and set local description (our answer)
+    const answer = await rtcPeerConnection.createAnswer();
+    await rtcPeerConnection.setLocalDescription(answer);
+
+    // Wait for ICE gathering to complete before sending the answer
+    if (rtcPeerConnection.iceGatheringState !== 'complete') {
+      await new Promise<void>(resolve => {
+        const handler = () => {
+          if (rtcPeerConnection?.iceGatheringState === 'complete') {
+            rtcPeerConnection?.removeEventListener('icegatheringstatechange', handler);
+            resolve();
+          }
+        };
+        rtcPeerConnection!.addEventListener('icegatheringstatechange', handler);
+        // Fallback timeout
+        setTimeout(resolve, 3000);
+      });
+    }
+
+    // Send the answer SDP to Rust
+    await fetch(`http://127.0.0.1:${port}/api/answer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: rtcPeerConnection.localDescription!.sdp,
+    });
+  } catch (e: any) {
+    streamError.value = `WebRTC: ${String(e)}`;
+  }
+}
+
 async function toggleStream() {
   streamMessage.value = "";
   streamError.value = "";
   try {
     if (streamRunning.value) {
+      // Close WebRTC
+      if (rtcPeerConnection) {
+        rtcPeerConnection.close();
+        rtcPeerConnection = null;
+      }
+      // Clear video
+      const video = document.getElementById('webrtc-video') as HTMLVideoElement;
+      if (video) video.srcObject = null;
+
       const result = await invoke<string>('stop_stream');
       streamMessage.value = result;
       streamRunning.value = false;
+      streamPort.value = null;
     } else {
-      const result = await invoke<string>('start_stream');
-      streamMessage.value = result;
+      // start_stream returns the signaling server port
+      const port = await invoke<number>('start_stream');
+      streamPort.value = port;
       streamRunning.value = true;
+      streamMessage.value = `Stream démarré (port signaling : ${port})`;
+
+      // Give GStreamer ~1 s to start before connecting WebRTC
+      setTimeout(() => setupWebRtc(port), 1000);
     }
   } catch (e: any) {
     streamError.value = String(e);
@@ -114,6 +183,20 @@ async function openNewWindow() {
     <div class="preview-box" v-if="lastCapture">
       <h3>Flux Overlay (Analyse YOLO à venir)</h3>
       <img :src="lastCapture" style="width: 100%; border: 2px solid red;" />
+    </div>
+
+    <!-- WebRTC stream preview -->
+    <div v-if="streamRunning" style="margin-top: 20px; border: 2px solid #396cd8; border-radius: 8px; overflow: hidden; background: #000;">
+      <div style="padding: 6px 10px; background: #1a1a3e; color: #aaf; font-size: 0.8em; font-family: monospace;">
+        ● LIVE — WebRTC loopback (port {{ streamPort }})
+      </div>
+      <video
+        id="webrtc-video"
+        autoplay
+        muted
+        playsinline
+        style="width: 100%; max-height: 400px; display: block;"
+      />
     </div>
   </main>
 </template>
