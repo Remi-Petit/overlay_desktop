@@ -7,18 +7,6 @@ import { WebviewWindow, getAllWebviewWindows } from '@tauri-apps/api/webviewWind
 let isGhostMode = false;
 const lastCapture = ref("");
 
-async function startCapture(label: string) {
-  setInterval(async () => {
-    try {
-      // On demande la capture de la fenêtre par son label
-      const base64Image = await invoke("capture_overlay", { window: label });
-      lastCapture.value = base64Image as string;
-    } catch (e) {
-      console.error("Erreur capture:", e);
-    }
-  }, 100); // 10 images par seconde
-}
-
 async function setupOverlay() {
   await register('F8', async (event) => {
       if (event.state === "Pressed") {
@@ -57,10 +45,6 @@ async function openNewWindow() {
 
   webview.once('tauri://error', function (e) {
     console.error('Erreur:', e);
-  });
-
-  webview.once('tauri://created', () => {
-    startCapture(label);
   });
 }
 </script>
